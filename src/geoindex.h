@@ -28,8 +28,14 @@
 #include "geoprimitives.h"
 #include "record.h"
 
-// GeoIndex is an index for GeoPoints within CoordinateSystem that provides fast range queries.
-template <typename RecordType, typename CoordinateSystem>
+// GeoIndex is an index for GeoPoints within CoordinateSystem extracted from instances of
+// RecordType which enables fast range queries.
+// HashType can be one of uint16_t, uint32_t or uint64_t; it determines the size of the geo hash
+// value calculated for each instance of RecordType and, indirectly, the granularity of the spatial
+// area within which all points will have the same geo hash value. A HashType set to uint16_t
+// results in each coordinate being divided into 2^8 equal ranges, uint32_t into 2^16 equal ranges
+// and uint64_t into 2^32 equal ranges.
+template <typename RecordType, typename CoordinateSystem, typename HashType>
 class GeoIndex {
 private:
   static const int DEFAULT_PREFIX_REFINEMENT_STOP_SIZE = 8;
@@ -101,12 +107,12 @@ public:
     }
 
   private:
-    mutable std::vector<RecordType> records_;
+    std::vector<RecordType> records_;
     mutable int64_t index_;
   };
 
   struct GeoRecord {
-    GeoHash<CoordinateSystem> hash;
+    GeoHash<CoordinateSystem, HashType> hash;
     GeoPoint<CoordinateSystem> point;
 
     GeoRecord(const GeoPoint<CoordinateSystem>& point)
@@ -165,8 +171,8 @@ public:
         std::chrono::system_clock::now().time_since_epoch()).count();
 
     QueryStats stats;
-    std::vector<GeoPrefix<CoordinateSystem>> prefixes;
-    GeoPrefix<CoordinateSystem>::search_prefixes(bounds, prefixes, prefix_refinement_stop_size_);
+    std::vector<GeoPrefix<CoordinateSystem, HashType>> prefixes;
+    GeoPrefix<CoordinateSystem, HashType>::search_prefixes(bounds, prefixes, prefix_refinement_stop_size_);
     stats.prefix_search_count = prefixes.size();
     for (const auto& prefix : prefixes) {
       source_->jump_to([&](const RecordType& record)->bool{
@@ -196,8 +202,8 @@ public:
 private:
   typedef std::pair<GeoRecord, RecordType> CombinedRecord;
 
-  static const GeoHasher& Hasher() {
-    static GeoHasher hasher;
+  static const GeoHasher<HashType>& Hasher() {
+    static GeoHasher<HashType> hasher;
     return hasher;
   }
 

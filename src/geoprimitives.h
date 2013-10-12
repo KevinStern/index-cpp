@@ -187,62 +187,90 @@ public:
 
 // -------------------------------------------------------------------------------------------------
 
-// GeoHash wraps a uint64_t hash value and carries the coordinate system to which its value
+// GeoHash wraps a HashType hash value and carries the coordinate system to which its value
 // applies in its type.
-template <typename CoordinateSystem>
+template <typename CoordinateSystem, typename HashType>
 class GeoHash {
 public:
-  GeoHash(uint64_t value) : value_(value) {}
+  GeoHash(HashType value) : value_(value) {}
 
   GeoHash(const GeoHash& hash) : value_(hash.value_) {}
 
-  GeoHash<CoordinateSystem>& operator=(const GeoHash<CoordinateSystem>& hash) {
+  GeoHash<CoordinateSystem, HashType>& operator=(const GeoHash<CoordinateSystem, HashType>& hash) {
     value_ = hash.value_;
     return *this;
   }
 
-  bool operator==(const GeoHash<CoordinateSystem>& hash) const {
+  bool operator==(const GeoHash<CoordinateSystem, HashType>& hash) const {
     return value_ == hash.value_;
   }
 
   // Get the hash value.
-  uint64_t value() const {
+  HashType value() const {
     return value_;
   }
 
 private:
-  uint64_t value_;
+  HashType value_;
 };
 
 namespace std {
-template <typename CoordinateSystem>
-class hash<GeoHash<CoordinateSystem>> {
+template <typename CoordinateSystem, typename HashType>
+class hash<GeoHash<CoordinateSystem, HashType>> {
 public:
-  size_t operator()(const GeoHash<CoordinateSystem>& hash) const {
+  size_t operator()(const GeoHash<CoordinateSystem, HashType>& hash) const {
     size_t result = 31;
-    result = 31 * result + std::hash<uint64_t>()(hash.value());
+    result = 31 * result + std::hash<HashType>()(hash.value());
     return result;
   }
 };
 }
 
-// Maps and unmaps points to distances down the Hilbert curve of 32 iterations.
+// Used for mapping from hash type to coordinate type and for compile-time validation of the hash
+// type:
+// A 64 bit hash type carries 32 bits from each coordinate.
+// A 32 bit hash type carries 16 bits from each coordinate.
+// A 16 bit hash type carries 8 bits from each coordinate.
+template <typename HashType>
+struct HashTypeInterpreter;
+
+template <>
+struct HashTypeInterpreter<uint64_t> {
+  typedef uint32_t CoordinateType;
+};
+
+template <>
+struct HashTypeInterpreter<uint32_t> {
+  typedef uint16_t CoordinateType;
+};
+
+template <>
+struct HashTypeInterpreter<uint16_t> {
+  typedef uint8_t CoordinateType;
+};
+
+// Maps and unmaps points to distances down the Hilbert curve of sizeof(HashType) * 8 iterations.
+template <typename HashType>
 class Hilbert {
+private:
+  typedef typename HashTypeInterpreter<HashType>::CoordinateType CoordinateType;
+
 public:
   enum Rotation {Up, Right, Down, Left};
 
-  uint64_t hilbert(uint32_t x, uint32_t y) const {
+  HashType hilbert(CoordinateType x, CoordinateType y) const {
     return hilbert(x, y, nullptr);
   }
 
-  // Map from the point (x, y) to the length down the Hilbert curve of 32 (the number of bits in
-  // each coordinate) iterations.
-  // rotations: 32 Rotation wide array which will be populated with the quadrant rotations at each
-  //            iteration of hilbert curve generation; ignored if nullptr.
-  uint64_t hilbert(uint32_t x, uint32_t y, Rotation* rotations) const {
-    uint64_t result = 0;
+  // Map from the point (x, y) to the length down the Hilbert curve of sizeof(CoordinateType) * 8
+  // iterations.
+  // rotations: sizeof(CoordinateType) * 8 rotation wide array which will be populated with the
+  //            quadrant rotations at each iteration of hilbert curve generation; ignored if
+  //            nullptr.
+  HashType hilbert(CoordinateType x, CoordinateType y, Rotation* rotations) const {
+    HashType result = 0;
     Rotation rotation = Up;
-    for (int i = 31; i >= 0; --i) {
+    for (int i = (sizeof(CoordinateType) << 3) - 1; i >= 0; --i) {
       uint8_t quadrant = 0;
       // | 0 | 3 |
       //  -------
@@ -264,25 +292,26 @@ public:
       if (rotations != nullptr) {
         rotations[i] = rotation;
       }
-      uint64_t rotated = rotate(rotation, quadrant);
+      HashType rotated = rotate(rotation, quadrant);
       rotation = new_rotation(rotation, rotated);
       result |= (rotated << (i << 1));
     }
     return result;
   }
 
-  void unhilbert(uint64_t d, uint32_t& x, uint32_t& y) const {
+  void unhilbert(HashType d, CoordinateType& x, CoordinateType& y) const {
     unhilbert(d, x, y, nullptr);
   }
 
   // Map from d, the output of the hilbert function, to the point (x, y).
-  // rotations: 32 Rotation wide array which will be populated with the quadrant rotations at each
-  //            iteration of hilbert curve generation; ignored if nullptr.
-  void unhilbert(uint64_t d, uint32_t& x, uint32_t& y, Rotation* rotations) const {
+  // rotations: sizeof(CoordinateType) * 8 rotation wide array which will be populated with the
+  //            quadrant rotations at each iteration of hilbert curve generation; ignored if
+  //            nullptr.
+  void unhilbert(HashType d, CoordinateType& x, CoordinateType& y, Rotation* rotations) const {
     x = 0;
     y = 0;
     Rotation rotation = Up;
-    for (int i = 31; i >= 0; --i) {
+    for (int i = (sizeof(CoordinateType) << 3) - 1; i >= 0; --i) {
       if (rotations != nullptr) {
         rotations[i] = rotation;
       }
@@ -387,28 +416,32 @@ private:
 };
 
 // GeoHasher hashes and unhashes GeoPoints. The GeoHash produced by geohashing a point is computed
-// as the distance down the Hilbert curve of 32 iterations (the number of bits produced for each
-// coordinate) corresponding to the result of mapping each coordinate to a 32 bit integer which
-// represents the coordinate's location within the CoordinateSystem's range as follows:
-// The high-order bit gives the coordinate's location relative to the midpoint of the range; the
-// next bit gives the coordinate's location relative to the the midpoint of the relevant half of the
-// range, and so on.
+// as the distance down the Hilbert curve of sizeof(HashType) * 8 iterations (the number of bits
+// produced for each coordinate) corresponding to the result of mapping each coordinate to a
+// sizeof(HashType) * 8 bit integer which represents the coordinate's location within the
+// CoordinateSystem's range as follows: The high-order bit gives the coordinate's location relative
+// to the midpoint of the range; the next bit gives the coordinate's location relative to the the
+// midpoint of the relevant half of the range, and so on.
 //
 // The construction of the Hilbert curve gives the nice property that points which are near one
 // another spatially tend to fall near one another on the curve; hence, points that are near one
 // another spatially tend to produce GeoHashes that are close in magnitude.
+template <typename HashType>
 class GeoHasher {
+private:
+  typedef typename HashTypeInterpreter<HashType>::CoordinateType CoordinateType;
+
 public: 
   // Compute the GeoHash for point.
   template <typename CoordinateSystem>
-  GeoHash<CoordinateSystem> hash(const GeoPoint<CoordinateSystem>& point) const {
+  GeoHash<CoordinateSystem, HashType> hash(const GeoPoint<CoordinateSystem>& point) const {
     double x_range[2];
     double y_range[2];
     CoordinateSystem::GetRanges(x_range, y_range);
 
-    uint32_t x = 0;
-    uint32_t y = 0;
-    for (int i = 31; i >= 0; --i) {
+    CoordinateType x = 0;
+    CoordinateType y = 0;
+    for (int i = (sizeof(CoordinateType) << 3) - 1; i >= 0; --i) {
       double y_mid = (y_range[0] + y_range[1]) / 2.;
       if (point.y() >= y_mid) {
         y |= 1 << i;
@@ -429,16 +462,16 @@ public:
 
   // Compute the GeoPoint for hash.
   template <typename CoordinateSystem>
-  GeoPoint<CoordinateSystem> unhash(const GeoHash<CoordinateSystem>& hash) const {
+  GeoPoint<CoordinateSystem> unhash(const GeoHash<CoordinateSystem, HashType>& hash) const {
     double x_range[2];
     double y_range[2];
     CoordinateSystem::GetRanges(x_range, y_range);
 
-    uint32_t x = 0;
-    uint32_t y = 0;
+    CoordinateType x = 0;
+    CoordinateType y = 0;
     hilbert_.unhilbert(hash.value(), x, y);
 
-    for (int i = 31; i >= 0; --i) {
+    for (int i = (sizeof(CoordinateType) << 3) - 1; i >= 0; --i) {
       double y_mid = (y_range[0] + y_range[1]) / 2.;
       if (y & (1 << i)) {
         y_range[0] = y_mid;
@@ -456,63 +489,70 @@ public:
   }
 
 private:
-  Hilbert hilbert_;
+  Hilbert<HashType> hilbert_;
 };
 
 // GeoPrefix represents a GeoHash prefix in that it holds both a hash value and an offset which
 // gives the number of low-order bits that are not part of the prefix.
-// The GeoHash itself represents a distance down the Hilbert curve of 32 iterations; distance values
-// that share a prefix are no farther from one another than the width of the prefix range.
+// The GeoHash itself represents a distance down the Hilbert curve of sizeof(HashType) * 8
+// iterations; distance values that share a prefix are no farther from one another than the width of
+// the prefix range.
 //
 // GeoPrefix provides a convenience method for finding the joint prefix for two GeoHashes and other
 // functionality such as giving the bounding box associated with the prefix.
-template <typename CoordinateSystem>
+template <typename CoordinateSystem, typename HashType>
 class GeoPrefix {
+private:
+  typedef typename HashTypeInterpreter<HashType>::CoordinateType CoordinateType;
+
 public:
-  // Calculate the joint prefix among h1 and h2.
-  // bitgroup gives the number of matching bits required before the group is included in the prefix.
-  static GeoPrefix<CoordinateSystem> joint_prefix(
-      GeoHash<CoordinateSystem> h1, GeoHash<CoordinateSystem> h2) {
-    uint64_t value = 0;
-    uint8_t offset = 64;
-    for (int i = 0; i < 64; ++i) {
-      uint64_t mask = 1ll << (63 - i);
+  // Calculate the joint GeoPrefix for h1 and h2.
+  static GeoPrefix<CoordinateSystem, HashType> joint_prefix(
+      GeoHash<CoordinateSystem, HashType> h1, GeoHash<CoordinateSystem, HashType> h2) {
+    HashType value = 0;
+    uint8_t offset = (sizeof(HashType) << 3);
+    for (int i = 0; i < (sizeof(HashType) << 3); ++i) {
+      HashType mask = 1ll << ((sizeof(HashType) << 3) - 1 - i);
       if ((h1.value() & mask) != (h2.value() & mask)) {
         break;
       }
       value |= (h1.value() & mask);
       --offset;
     }
-    return GeoPrefix<CoordinateSystem>(value, offset);
+    return GeoPrefix<CoordinateSystem, HashType>(value, offset);
   }
 
   // Compute a collection of prefixes such that any point within bounds will exhibit a prefix from
   // the collection.
   // prefix_refinement_stop_size: The prefix count at which to stop refining query prefixes.
   static void search_prefixes(const GeoRectangle<CoordinateSystem>& bounds,
-      std::vector<GeoPrefix<CoordinateSystem>>& prefixes, size_t prefix_refinement_stop_size) {
-    GeoHasher hasher;
+                              std::vector<GeoPrefix<CoordinateSystem, HashType>>& prefixes,
+                              size_t prefix_refinement_stop_size) {
+    GeoHasher<HashType> hasher;
     prefixes.push_back(joint_prefix(hasher.hash(bounds.ll()), hasher.hash(bounds.ur())));
-    std::vector<GeoPrefix<CoordinateSystem>> workspace;
+    std::vector<GeoPrefix<CoordinateSystem, HashType>> workspace;
     // Split and filter
-    bool size_exhausted = false;
-    for (int i = 0; !size_exhausted; ++i) {
+    bool stop_splitting = false;
+    for (int i = 0; !stop_splitting; ++i) {
       size_t prefix_count = prefixes.size();
       for (auto& next : prefixes) {
-        if (size_exhausted || next.offset() < 2) {
+        if (stop_splitting || next.offset() < 2) {
           workspace.push_back(next);
+          // If we're here because next.offset() < 2, then no additional splitting will occur.
+          stop_splitting = true;
         } else {
           uint8_t new_offset = next.offset() - 2;
           --prefix_count;
-          for (uint64_t i = 0; i < 4; ++i) {
-            GeoPrefix<CoordinateSystem> split(next.value() | (i << new_offset), new_offset);
+          for (HashType i = 0; i < 4; ++i) {
+            GeoPrefix<CoordinateSystem, HashType> split(next.value() | (i << new_offset),
+                                                        new_offset);
             if (bounds.intersects(split.bounds())) {
               workspace.push_back(split);
               ++prefix_count;
             }
           }
           if (prefix_count >= prefix_refinement_stop_size) {
-            size_exhausted = true;
+            stop_splitting = true;
           }
         }
       }
@@ -524,7 +564,7 @@ public:
       int i;
       for (i = 0; i < prefixes.size() - 1; ++i) {
         // {prefix}0 and {prefix}1 will be adjacent, if they are both present.
-        GeoPrefix<CoordinateSystem> prefix(prefixes[i].value(), prefixes[i].offset() + 1);
+        GeoPrefix<CoordinateSystem, HashType> prefix(prefixes[i].value(), prefixes[i].offset() + 1);
         if (prefixes[i].offset() == prefixes[i + 1].offset() && prefix.applies_to(prefixes[i + 1])) {
           workspace.push_back(prefix);
           ++i;
@@ -544,23 +584,23 @@ public:
   }
 
   // value is a GeoHash value and offset gives the number of low-order bits to ignore.
-  GeoPrefix(uint64_t value, uint8_t offset) : value_(value), offset_(offset) {
-    if (offset == 0) {
+  GeoPrefix(HashType value, uint8_t offset) : value_(value), offset_(offset) {
+    if (offset == (sizeof(HashType) << 3)) {
       value_ = 0;
     } else {
-      value_ &= (0xffffffffffffffffll << offset_);
+      value_ &= static_cast<HashType>(0xffffffffffffffffll << offset_);
     }
   }
 
-  GeoPrefix(const GeoPrefix<CoordinateSystem>& geo_prefix)
+  GeoPrefix(const GeoPrefix<CoordinateSystem, HashType>& geo_prefix)
       : value_(geo_prefix.value_), offset_(geo_prefix.offset_) {}
 
-  bool operator==(const GeoPrefix<CoordinateSystem>& prefix) const {
+  bool operator==(const GeoPrefix<CoordinateSystem, HashType>& prefix) const {
     return value_ == prefix.value_ && offset_ == prefix.offset_;
   }
 
   // Get the value.
-  uint64_t value() const {
+  HashType value() const {
     return value_;
   }
 
@@ -570,24 +610,24 @@ public:
   }
 
   // Test whether or not this prefix is a prefix of hash.
-  bool applies_to(GeoHash<CoordinateSystem> hash) const {
-    if (offset_ == 64) {
+  bool applies_to(GeoHash<CoordinateSystem, HashType> hash) const {
+    if (offset_ == (sizeof(HashType) << 3)) {
       // The C++ standard leaves bit-shifting by a value greater than the type's width undefined;
       // therefore, explicitly defining this behavior is required.
       return true;
     }
-    return (hash.value() & (0xffffffffffffffffll << offset_)) == value_;
+    return (hash.value() & static_cast<HashType>(0xffffffffffffffffll << offset_)) == value_;
   }
 
   // Test whether or not this prefix is a prefix of prefix.
-  bool applies_to(const GeoPrefix<CoordinateSystem>& prefix) const {
-    if (offset_ == 64) {
+  bool applies_to(const GeoPrefix<CoordinateSystem, HashType>& prefix) const {
+    if (offset_ == (sizeof(HashType) << 3)) {
       // The C++ standard leaves bit-shifting by a value greater than the type's width undefined;
       // therefore, explicitly defining this behavior is required.
       return true;
     }
     return offset_ >= prefix.offset_ &&
-           (prefix.value() & (0xffffffffffffffffll << offset_)) == value_;
+           (prefix.value() & static_cast<HashType>(0xffffffffffffffffll << offset_)) == value_;
   }
 
   // Calculate the bounds for this prefix. The bounds for a prefix is the rectangle that delimits
@@ -596,12 +636,12 @@ public:
     double x_range[2];
     double y_range[2];
     CoordinateSystem::GetRanges(x_range, y_range);
-    if (offset_ < 64) {
-      uint32_t x = 0;
-      uint32_t y = 0;
-      Hilbert::Rotation rotations[32];
+    if (offset_ < (sizeof(HashType) << 3)) {
+      CoordinateType x = 0;
+      CoordinateType y = 0;
+      typename TypedHilbert::Rotation rotations[32];
       hilbert_.unhilbert(value_, x, y, rotations);
-      int i = 63;
+      int i = (sizeof(HashType) << 3) - 1;
       while (i > offset_) {
         if (y & (1 << (i >> 1))) {
           y_range[0] = (y_range[0] + y_range[1]) / 2.;
@@ -618,16 +658,16 @@ public:
       }
       if (i == offset_) {
         switch (rotations[(i >> 1)]) {
-          case Hilbert::Up:
-          case Hilbert::Down:
+          case TypedHilbert::Up:
+          case TypedHilbert::Down:
             if (x & (1 << (i >> 1))) {
               x_range[0] = (x_range[0] + x_range[1]) / 2.;
             } else {
               x_range[1] = (x_range[0] + x_range[1]) / 2.;
             }
             break;
-          case Hilbert::Left:
-          case Hilbert::Right:
+          case TypedHilbert::Left:
+          case TypedHilbert::Right:
             if (y & (1 << (i >> 1))) {
               y_range[0] = (y_range[0] + y_range[1]) / 2.;
             } else {
@@ -643,24 +683,28 @@ public:
   }
 
 private:
-  Hilbert hilbert_;
-  uint64_t value_;
+  typedef Hilbert<HashType> TypedHilbert;
+
+  TypedHilbert hilbert_;
+  HashType value_;
   uint8_t offset_;
 
   // For pretty printing.
-  friend std::ostream& operator<<(std::ostream& out, const GeoPrefix<CoordinateSystem>& prefix) {
-    out << "value=" << std::bitset<64>(prefix.value_) << " offset=" << (int) prefix.offset_;
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const GeoPrefix<CoordinateSystem, HashType>& prefix) {
+    out << "value=" << std::bitset<(sizeof(HashType) << 3)>(prefix.value_) << " offset="
+        << (int) prefix.offset_;
     return out;
   }
 };
 
 namespace std {
-template <typename CoordinateSystem>
-class hash<GeoPrefix<CoordinateSystem>> {
+template <typename CoordinateSystem, typename HashType>
+class hash<GeoPrefix<CoordinateSystem, HashType>> {
 public:
-  size_t operator()(const GeoPrefix<CoordinateSystem>& prefix) const {
+  size_t operator()(const GeoPrefix<CoordinateSystem, HashType>& prefix) const {
     size_t result = 31;
-    result = 31 * result + std::hash<uint64_t>()(prefix.value());
+    result = 31 * result + std::hash<HashType>()(prefix.value());
     result = 31 * result + std::hash<uint8_t>()(prefix.offset());
     return result;
   }
