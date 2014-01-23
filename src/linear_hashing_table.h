@@ -548,12 +548,15 @@ public:
 
     virtual Bucket* new_overflow_bucket() override {
       size_t i = 0;
+      const std::vector<uint8_t>& bytes = overflow_bucket_status_.bytes();
+      for (size_t j = 0; j < bytes.size() && bytes[j] == 0xff; ++j) i += 8;
       for (; i < overflow_bucket_status_.size(); ++i) {
         if (!overflow_bucket_status_.is_set(i)) {
           break;
         }
       }
-      if (i == overflow_bucket_status_.size()) {
+      if (i >= overflow_bucket_status_.size()) {
+        i = overflow_bucket_status_.size();
         overflow_bucket_status_.resize(i + 1);
       }
       overflow_bucket_status_.set(i);
