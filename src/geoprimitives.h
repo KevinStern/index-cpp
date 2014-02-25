@@ -529,22 +529,26 @@ public:
                               std::vector<GeoPrefix<CoordinateSystem, HashType>>& prefixes,
                               size_t prefix_refinement_stop_size) {
     GeoHasher<HashType> hasher;
+    // The joint prefix between bounds.ll() and bounds.ur() gives a quadrant that contains both
+    // points and, therefore, all points within bounds.
     prefixes.push_back(joint_prefix(hasher.hash(bounds.ll()), hasher.hash(bounds.ur())));
     std::vector<GeoPrefix<CoordinateSystem, HashType>> workspace;
-    // Split and filter
+    // Split the joint prefix and filter out unnecessary search areas.
     bool stop_splitting = false;
     for (int i = 0; !stop_splitting; ++i) {
       size_t prefix_count = prefixes.size();
-      for (auto& next : prefixes) {
-        if (stop_splitting || next.offset() < 2) {
-          workspace.push_back(next);
-          // If we're here because next.offset() < 2, then no additional splitting will occur.
+      for (auto& prefix : prefixes) {
+        if (stop_splitting || prefix.offset() == 0) {
+          workspace.push_back(prefix);
+          // If we're here because prefix.offset() == 0, then no additional splitting will occur.
           stop_splitting = true;
         } else {
-          uint8_t new_offset = next.offset() - 2;
+          uint8_t new_offset = prefix.offset() - 1;
           --prefix_count;
-          for (HashType i = 0; i < 4; ++i) {
-            GeoPrefix<CoordinateSystem, HashType> split(next.value() | (i << new_offset),
+          // Extend prefix by one bit and select the forks that intersect bounds. Heuristically,
+          // this will eliminate an unnecessary half of a prefix that is too coarse.
+          for (HashType i : {0, 1}) {
+            GeoPrefix<CoordinateSystem, HashType> split(prefix.value() | (i << new_offset),
                                                         new_offset);
             if (bounds.intersects(split.bounds())) {
               workspace.push_back(split);
@@ -559,7 +563,7 @@ public:
       prefixes.swap(workspace);
       workspace.clear();
     }
-    // Recombine
+    // Recombine prefixes that were split but not filtered due to both halves intersecting bounds.
     while (true) {
       int i;
       for (i = 0; i < prefixes.size() - 1; ++i) {
