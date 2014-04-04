@@ -30,12 +30,12 @@
 
 // -------------------------------------------------------------------------------------------------
 
-// A coordinate system gives the x and y coordinate extents for geo primitives. Following are
-// pre-defined coordinate systems. A custom coordinate system can be defined by creating a class
-// with a static function GetRanges which initializes an x and y coordinate extent array.
+// A CoordinateSystem is a Cartesian coordinate system with custom x and y coordinate extents.
+// Following are pre-defined CoordinateSystems. A custom CoordinateSystem can be defined by creating
+// a class with a static function GetRanges which initializes an x and y coordinate extent array.
 
-// The GeoHash and related primitives are templated so that their coordinate system is part of
-// their type. This coordinate system gives latitude/longitude in degrees.
+// The GeoHash and related primitives are templated so that their CoordinateSystem is part of their
+// type. This CoordinateSystem gives latitude/longitude in degrees.
 class GeoDegreeCoordinateSystem {
 public:
   static void GetRanges(double xrange[2], double yrange[2]) {
@@ -46,8 +46,8 @@ public:
   }
 };
 
-// The GeoHash and related primitives are templated so that their coordinate system is part of
-// their type. This coordinate system gives latitude/longitude in radians.
+// The GeoHash and related primitives are templated so that their CoordinateSystem is part of their
+// type. This CoordinateSystem gives latitude/longitude in radians.
 class GeoRadianCoordinateSystem {
 public:
   static void GetRanges(double xrange[2], double yrange[2]) {
@@ -187,8 +187,7 @@ public:
 
 // -------------------------------------------------------------------------------------------------
 
-// GeoHash wraps a HashType hash value and carries the coordinate system to which its value
-// applies in its type.
+// GeoHash wraps a HashType geohash value within CoordinateSystem.
 template <typename CoordinateSystem, typename HashType>
 class GeoHash {
 public:
@@ -249,7 +248,20 @@ struct HashTypeInterpreter<uint16_t> {
   typedef uint8_t CoordinateType;
 };
 
-// Maps and unmaps points to distances down the Hilbert curve of sizeof(HashType) * 8 iterations.
+// Maps and unmaps points to distances down the Hilbert curve of #bits(sizeof(CoordinateType))
+// iterations.
+//
+// To map a point to its Hilbert value, this implementation operates iteratively by dividing the
+// current area into quadrants, calculating the quadrant into which the point falls, and rotating
+// the quadrant ordering to match the current Hilbert curve iteration. This process repeats with the
+// calculated quadrant for #bits(sizeof(CoordinateType)) iterations.
+//
+// To map a Hilbert value to a point, this implementation operates iteratively by extracting the
+// rotated quadrant from the appropriate two-bits of the Hilbert value and un-rotating based upon
+// the Hilbert curve iteration which produced the bits. This process repeats for
+// #bits(sizeof(CoordinateType)) iterations.
+//
+// See http://en.wikipedia.org/wiki/Hilbert_curve for the construction of a Hilbert curve.
 template <typename HashType>
 class Hilbert {
 private:
@@ -262,9 +274,9 @@ public:
     return hilbert(x, y, nullptr);
   }
 
-  // Map from the point (x, y) to the length down the Hilbert curve of sizeof(CoordinateType) * 8
+  // Map from the point (x, y) to the length down the Hilbert curve of #bits(sizeof(CoordinateType))
   // iterations.
-  // rotations: sizeof(CoordinateType) * 8 rotation wide array which will be populated with the
+  // rotations: #bits(sizeof(CoordinateType)) Rotation wide array which will be populated with the
   //            quadrant rotations at each iteration of hilbert curve generation; ignored if
   //            nullptr.
   HashType hilbert(CoordinateType x, CoordinateType y, Rotation* rotations) const {
@@ -304,7 +316,7 @@ public:
   }
 
   // Map from d, the output of the hilbert function, to the point (x, y).
-  // rotations: sizeof(CoordinateType) * 8 rotation wide array which will be populated with the
+  // rotations: #bits(sizeof(CoordinateType)) Rotation wide array which will be populated with the
   //            quadrant rotations at each iteration of hilbert curve generation; ignored if
   //            nullptr.
   void unhilbert(HashType d, CoordinateType& x, CoordinateType& y, Rotation* rotations) const {
@@ -416,12 +428,14 @@ private:
 };
 
 // GeoHasher hashes and unhashes GeoPoints. The GeoHash produced by geohashing a point is computed
-// as the distance down the Hilbert curve of sizeof(HashType) * 8 iterations (the number of bits
-// produced for each coordinate) corresponding to the result of mapping each coordinate to a
-// sizeof(HashType) * 8 bit integer which represents the coordinate's location within the
-// CoordinateSystem's range as follows: The high-order bit gives the coordinate's location relative
-// to the midpoint of the range; the next bit gives the coordinate's location relative to the the
-// midpoint of the relevant half of the range, and so on.
+// as the distance down the Hilbert curve of #bits(sizeof(CoordinateType)) iterations overlaid onto
+// the CoordinateSystem's range. Each coordinate is first mapped to a #bits(sizeof(CoordinateType))
+// bit integer which represents the coordinate's location within the CoordinateSystem's range as
+// follows: The high-order bit gives the coordinate's location relative to the midpoint of the
+// range, the next bit gives the coordinate's location relative to the the midpoint of the relevant
+// half of the range, and so on. The results of this process are the coordinates within an integer
+// coordinate system that spans the CoordinateSystem's range onto which a Hilbert curve can be
+// overlaid.
 //
 // The construction of the Hilbert curve gives the nice property that points which are near one
 // another spatially tend to fall near one another on the curve; hence, points that are near one
@@ -492,11 +506,11 @@ private:
   Hilbert<HashType> hilbert_;
 };
 
-// GeoPrefix represents a GeoHash prefix in that it holds both a hash value and an offset which
-// gives the number of low-order bits that are not part of the prefix.
-// The GeoHash itself represents a distance down the Hilbert curve of sizeof(HashType) * 8
-// iterations; distance values that share a prefix are no farther from one another than the width of
-// the prefix range.
+// GeoPrefix represents a GeoHash prefix with a hash value and an offset which gives the number of
+// low-order bits that are not part of the prefix.
+// The GeoHash itself represents a distance down the Hilbert curve of #bits(sizeof(CoordinateType))
+// iterations within CoordinateSystem; distance values that share a prefix are no farther from one
+// another than the width of the prefix range.
 //
 // GeoPrefix provides a convenience method for finding the joint prefix for two GeoHashes and other
 // functionality such as giving the bounding box associated with the prefix.
