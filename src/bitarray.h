@@ -100,7 +100,7 @@ private:
   friend std::ostream& operator<<(std::ostream& out, const Bitarray& bitarray) {
     out << "[";
     if (bitarray.size_ > 0) {
-      for (int i = 0; ; ++i) {
+      for (size_t i = 0; ; ++i) {
         out << bitarray.is_set(i);
         if (i < bitarray.size_ - 1) {
           out << ",";

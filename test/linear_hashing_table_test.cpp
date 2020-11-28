@@ -29,7 +29,7 @@ static const char TEST_OVERFLOW_FILENAME[] = "LinearHashingTableTest.overflow_re
 
 class RecordSerializer {
 public:
-  static constexpr uint32_t ENCODED_SIZE = 8;
+  static constexpr int ENCODED_SIZE = 8;
 
   static void parse(Buffer& buffer, int32_t& key, float& value) {
     key = buffer.get_int32();
@@ -55,7 +55,7 @@ TEST(LinearHashingTableInMemory) {
       ASSERT_TRUE(table.contains(j));
     }
   }
-  ASSERT_EQ(iters, table.size());
+  ASSERT_EQ(static_cast<size_t>(iters), table.size());
   float value;
   for (int i = iters - 1; i >= 0; --i) {
     ASSERT_TRUE(table.remove(i, value));
@@ -87,7 +87,7 @@ TEST(LinearHashingTableFilesystem) {
     for (int i = 0; i < (lap + 1) * iters_per_lap; ++i) {
       if (i >= lap * iters_per_lap) {
         ASSERT_TRUE(table.insert(i, static_cast<float>(i) / iters));
-        ASSERT_EQ(i + 1, table.size());
+        ASSERT_EQ(static_cast<size_t>(i + 1), table.size());
       } else {
         ASSERT_FALSE(table.insert(i, static_cast<float>(i) / iters));
         ASSERT_EQ(initial_table_size, table.size());
@@ -107,7 +107,7 @@ TEST(LinearHashingTableFilesystem) {
         ASSERT_EQ(static_cast<float>(i) / iters, value);
         ASSERT_TRUE(table.remove(i, value));
         ASSERT_EQ(static_cast<float>(i) / iters, value);
-        ASSERT_EQ(iters - (i + 1), table.size());
+        ASSERT_EQ(static_cast<size_t>(iters - (i + 1)), table.size());
       } else {
         ASSERT_FALSE(table.remove(i, value));
         ASSERT_EQ(initial_table_size, table.size());

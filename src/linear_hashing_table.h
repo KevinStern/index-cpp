@@ -450,7 +450,7 @@ public:
           if (overflow != nullptr) {
             buffer.put_uint64(overflow->index());
           } else {
-            buffer.put_uint64(std::numeric_limits<uint64_t>::max());
+            buffer.put_uint64(std::numeric_limits<size_t>::max());
           }
           buffer.put_uint64(records.size());
           for (const auto& next : records) {
@@ -531,12 +531,12 @@ public:
       buffer.inc_index(fread(buffer.data(), 1, buffer.remaining(), file));
       buffer.switch_mode();
       records.resize(count);
-      for (int i = 0; i < count; ++i) {
+      for (size_t i = 0; i < count; ++i) {
         deserialize_(buffer, records[i].first, records[i].second);
       }
       if (bucket->overflow() == nullptr) {
         overflow.reset(
-            overflow_index == std::numeric_limits<uint64_t>::max() ?
+            overflow_index == std::numeric_limits<size_t>::max() ?
                 nullptr :
                 unloaded_bucket(overflow_index, true));
       }
@@ -791,13 +791,13 @@ private:
   void initialize() {
     bucket_manager_->initialize();
     if (metadata_.primary_bucket_count > 0) {
-      for (int i = 0; i < metadata_.primary_bucket_count; ++i) {
+      for (size_t i = 0; i < metadata_.primary_bucket_count; ++i) {
         // Create the primary bucket.
         bucket_chains_.push_back(
             std::unique_ptr<Bucket>(bucket_manager_->unloaded_bucket(i, false)));
       }
     } else {
-      for (int i = 0; i < metadata_.n; ++i) grow();
+      for (size_t i = 0; i < metadata_.n; ++i) grow();
     }
   }
 

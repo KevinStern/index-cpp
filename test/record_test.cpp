@@ -24,7 +24,7 @@
 #include "record.h"
 
 struct Record {
-  int32_t id;
+  uint32_t id;
   float value;
 };
 
@@ -33,12 +33,12 @@ public:
   static constexpr uint32_t ENCODED_SIZE = 8;
 
   static void parse(Buffer& buffer, Record& record) {
-    record.id = buffer.get_int32();
+    record.id = buffer.get_uint32();
     record.value = buffer.get_float();
   }
 
   static void write(const Record& record, Buffer& buffer) {
-    buffer.put_int32(record.id);
+    buffer.put_uint32(record.id);
     buffer.put_float(record.value);
   }
 };
@@ -48,10 +48,10 @@ static const char TEST_FILENAME[] = "RecordTest.records";
 void CreateFile(size_t count) {
   FILE* file = fopen(TEST_FILENAME, "wb");
   Buffer buffer(Buffer::LITTLE, count * RecordSerializer::ENCODED_SIZE);
-  for (int i = 0; i < count; ++i) {
+  for (size_t i = 0; i < count; ++i) {
     Record next;
     next.id = i;
-    next.value = i + (float)i / count;
+    next.value = i + static_cast<float>(i) / count;
     RecordSerializer::write(next, buffer);
   }
   buffer.switch_mode();
@@ -65,14 +65,14 @@ TEST(RecordBasic) {
   CreateFile(count);
   RecordReader<Record> reader(TEST_FILENAME, &RecordSerializer::parse,
                               RecordSerializer::ENCODED_SIZE, Buffer::LITTLE, 16);
-  ASSERT_EQ(0, reader.index());
-  for (int i = 0; i < count; ++i) {
+  ASSERT_EQ(0u, reader.index());
+  for (size_t i = 0; i < count; ++i) {
     reader.jump(i);
     ASSERT_EQ(i, reader.index());
     Record record;
     reader.read(record);
     ASSERT_EQ(i, record.id);
-    ASSERT_EQ(i + (float)i / count, record.value, 0.000000001);
+    ASSERT_EQ(i + static_cast<float>(i) / count, record.value, 0.000000001);
   }
   ASSERT_EQ(count, reader.index());
 }
@@ -85,19 +85,19 @@ TEST(RecordJumpto) {
                               RecordSerializer::ENCODED_SIZE, Buffer::LITTLE, 16);
   {
     reader.jump_to([&](const Record& record)->bool{return false;});
-    ASSERT_EQ(0, reader.index());
+    ASSERT_EQ(0u, reader.index());
     Record record;
     reader.read(record);
-    ASSERT_EQ(0, record.id);
+    ASSERT_EQ(0u, record.id);
     ASSERT_EQ(0, record.value, 0.000000001);
   }
-  for (int i = 0; i < count; ++i) {
+  for (size_t i = 0; i < count; ++i) {
     reader.jump_to([&](const Record& record)->bool{return record.id < i;});
     ASSERT_EQ(i, reader.index());
     Record record;
     reader.read(record);
     ASSERT_EQ(i, record.id);
-    ASSERT_EQ(i + (float)i / count, record.value, 0.000000001);
+    ASSERT_EQ(i + static_cast<float>(i) / count, record.value, 0.000000001);
   }
   {
     reader.jump_to([&](const Record& record)->bool{return true;});

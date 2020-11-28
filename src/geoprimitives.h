@@ -525,7 +525,7 @@ public:
       GeoHash<CoordinateSystem, HashType> h1, GeoHash<CoordinateSystem, HashType> h2) {
     HashType value = 0;
     uint8_t offset = (sizeof(HashType) << 3);
-    for (int i = 0; i < (sizeof(HashType) << 3); ++i) {
+    for (size_t i = 0; i < (sizeof(HashType) << 3); ++i) {
       HashType mask = 1ll << ((sizeof(HashType) << 3) - 1 - i);
       if ((h1.value() & mask) != (h2.value() & mask)) {
         break;
@@ -549,7 +549,7 @@ public:
     std::vector<GeoPrefix<CoordinateSystem, HashType>> workspace;
     // Split the joint prefix and filter out unnecessary search areas.
     bool stop_splitting = false;
-    for (int i = 0; !stop_splitting; ++i) {
+    while (!stop_splitting) {
       size_t prefix_count = prefixes.size();
       for (auto& prefix : prefixes) {
         if (stop_splitting || prefix.offset() == 0) {
@@ -579,7 +579,7 @@ public:
     }
     // Recombine prefixes that were split but not filtered due to both halves intersecting bounds.
     while (true) {
-      int i;
+      size_t i;
       for (i = 0; i < prefixes.size() - 1; ++i) {
         // {prefix}0 and {prefix}1 will be adjacent, if they are both present.
         GeoPrefix<CoordinateSystem, HashType> prefix(prefixes[i].value(), prefixes[i].offset() + 1);

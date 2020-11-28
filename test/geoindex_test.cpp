@@ -118,15 +118,17 @@ void GeoIndexBasicTestHelper() {
 
     std::unordered_set<AnchoredGeoPoint> file_actual;
     std::unordered_set<AnchoredGeoPoint> vector_actual;
-    typename AnchoredGeoIndex::QueryStats file_stats =
-        file_index.query(rect, [&](const IndexRecord& record){file_actual.insert(record.point);});
-    typename AnchoredGeoIndex::QueryStats vector_stats =
-        vector_index.query(rect, [&](const IndexRecord& record){vector_actual.insert(record.point);});
+    //typename AnchoredGeoIndex::QueryStats file_stats =
+    file_index.query(rect, [&](const IndexRecord& record){file_actual.insert(record.point);});
+    //typename AnchoredGeoIndex::QueryStats vector_stats =
+    vector_index.query(rect, [&](const IndexRecord& record){vector_actual.insert(record.point);});
+/*
     LOG("File: read=" << file_stats.record_read_count << " prefixes=" <<
         file_stats.prefix_search_count << " time=" << file_stats.time_us << "(us)\n" <<
         "\tVector: read=" << vector_stats.record_read_count << " prefixes=" <<
         vector_stats.prefix_search_count << " time=" << vector_stats.time_us << "(us)\n" <<
         "\tExpected: size=" << expected.size() << " time=" << time << "(us)");
+*/
         
     ASSERT_TRUE(expected == file_actual);
     ASSERT_TRUE(expected == vector_actual);

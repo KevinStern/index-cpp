@@ -71,7 +71,7 @@ void GeoPrefixJointPrefixTestHelper() {
   ASSERT_EQ(AnchoredGeoPrefix(8, 3), AnchoredGeoPrefix::joint_prefix(8, 12));
   ASSERT_EQ(AnchoredGeoPrefix(0, (sizeof(HashType) << 3)),
             AnchoredGeoPrefix::joint_prefix(0, 1ll << ((sizeof(HashType) << 3) - 1)));
-  for (int i = 8; i < 16; ++i) {
+  for (size_t i = 8; i < 16; ++i) {
     ASSERT_TRUE(AnchoredGeoPrefix(8, 3).applies_to(i));
   }
   ASSERT_FALSE(AnchoredGeoPrefix(8, 3).applies_to(16));
@@ -98,22 +98,22 @@ void HilbertTestHelper() {
   // |  5 |  6 |  9 | 10 |
   HashType mask = 0;
   mask = ~mask;
-  ASSERT_EQ(0, hilbert.hilbert(0x0, (0xffffffff & mask)));
-  ASSERT_EQ(1, hilbert.hilbert(0x1, (0xffffffff & mask)));
-  ASSERT_EQ(2, hilbert.hilbert(0x1, (0xfffffffe & mask)));
-  ASSERT_EQ(3, hilbert.hilbert(0x0, (0xfffffffe & mask)));
-  ASSERT_EQ(4, hilbert.hilbert(0x0, (0xfffffffd & mask)));
-  ASSERT_EQ(5, hilbert.hilbert(0x0, (0xfffffffc & mask)));
-  ASSERT_EQ(6, hilbert.hilbert(0x1, (0xfffffffc & mask)));
-  ASSERT_EQ(7, hilbert.hilbert(0x1, (0xfffffffd & mask)));
-  ASSERT_EQ(8, hilbert.hilbert(0x2, (0xfffffffd & mask)));
-  ASSERT_EQ(9, hilbert.hilbert(0x2, (0xfffffffc & mask)));
-  ASSERT_EQ(10, hilbert.hilbert(0x3, (0xfffffffc & mask)));
-  ASSERT_EQ(11, hilbert.hilbert(0x3, (0xfffffffd & mask)));
-  ASSERT_EQ(12, hilbert.hilbert(0x3, (0xfffffffe & mask)));
-  ASSERT_EQ(13, hilbert.hilbert(0x2, (0xfffffffe & mask)));
-  ASSERT_EQ(14, hilbert.hilbert(0x2, (0xffffffff & mask)));
-  ASSERT_EQ(15, hilbert.hilbert(0x3, (0xffffffff & mask)));
+  ASSERT_EQ(0u, hilbert.hilbert(0x0, (0xffffffff & mask)));
+  ASSERT_EQ(1u, hilbert.hilbert(0x1, (0xffffffff & mask)));
+  ASSERT_EQ(2u, hilbert.hilbert(0x1, (0xfffffffe & mask)));
+  ASSERT_EQ(3u, hilbert.hilbert(0x0, (0xfffffffe & mask)));
+  ASSERT_EQ(4u, hilbert.hilbert(0x0, (0xfffffffd & mask)));
+  ASSERT_EQ(5u, hilbert.hilbert(0x0, (0xfffffffc & mask)));
+  ASSERT_EQ(6u, hilbert.hilbert(0x1, (0xfffffffc & mask)));
+  ASSERT_EQ(7u, hilbert.hilbert(0x1, (0xfffffffd & mask)));
+  ASSERT_EQ(8u, hilbert.hilbert(0x2, (0xfffffffd & mask)));
+  ASSERT_EQ(9u, hilbert.hilbert(0x2, (0xfffffffc & mask)));
+  ASSERT_EQ(10u, hilbert.hilbert(0x3, (0xfffffffc & mask)));
+  ASSERT_EQ(11u, hilbert.hilbert(0x3, (0xfffffffd & mask)));
+  ASSERT_EQ(12u, hilbert.hilbert(0x3, (0xfffffffe & mask)));
+  ASSERT_EQ(13u, hilbert.hilbert(0x2, (0xfffffffe & mask)));
+  ASSERT_EQ(14u, hilbert.hilbert(0x2, (0xffffffff & mask)));
+  ASSERT_EQ(15u, hilbert.hilbert(0x3, (0xffffffff & mask)));
 }
 }
 
