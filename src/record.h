@@ -69,9 +69,7 @@ public:
   }
 
   ~RecordReader() {
-    if (fclose(file_) != 0) {
-      throw std::runtime_error("file close error");
-    }
+    fclose(file_);
   }
 
   // Get the index of the next record to be returned by read.
